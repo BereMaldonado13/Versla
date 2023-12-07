@@ -1,47 +1,60 @@
- const CACHE_NAME = 'cache-v1';
-
- self.addEventListener('install', (event) => {
-    const preCache = caches.open(CACHE_NAME)
-        .then((cache) => {
-            return cache.addAll([
-                'index.html',
-                'css/styles.css',
-                'css/bootstrap.min.css',
-                'css/londinium-theme.css',
-                'js/app.js',
-                'offline.html'
-            ]);
-        });
-
-    event.waitUntil(preCache);
-
-});
-
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request)
-            .then((response) => {
-                if (response) {
-                    return response;
-                }
-
-                console.log('No existe en cache', event.request.url);
-
-                return fetch(event.request)
-                    .then((webResponse) => {
-                        return caches.open(CACHE_NAME)
-                            .then((cache) => { 
-                                cache.put(event.request, webResponse.clone());
-                                return webResponse;
-                            });
-                    });
-            })
-            .catch((error) => {
-                console.error('Fetch error:', error);
-
-                if (event.request.headers.get('accept').includes('text/html')) {
-                    return caches.match('/offline.html');
-                }
-            })
-    );
-});
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./Service_Worker.js').then(function (registration) {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      }, function (err) {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+    });
+  }
+  //asignar un nombre y versión al cache
+const CACHE_NAME = 'xamplepwa',
+urlsToCache = [
+    '.',
+    './index.html',
+]
+//durante la fase de instalación, generalmente se almacena en caché los activos estáticos
+self.addEventListener('install', e => {
+e.waitUntil(
+    caches.open(CACHE_NAME)
+        .then(cache => {
+            return cache.addAll(urlsToCache)
+                .then(() => self.skipWaiting())
+        })
+        .catch(err => console.log('Falló registro de cache', err))
+)
+})
+//una vez que se instala el SW, se activa y busca los recursos para hacer que funcione sin conexión
+self.addEventListener('activate', e => {
+const cacheWhitelist = [CACHE_NAME]
+e.waitUntil(
+    caches.keys()
+        .then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    //Eliminamos lo que ya no se necesita en cache
+                    if (cacheWhitelist.indexOf(cacheName) === -1) {
+                        return caches.delete(cacheName)
+                    }
+                })
+            )
+        })
+        // Le indica al SW activar el cache actual
+        .then(() => self.clients.claim())
+)
+})
+//cuando el navegador recupera una url
+self.addEventListener('fetch', e => {
+//Responder ya sea con el objeto en caché o continuar y buscar la url real
+e.respondWith(
+    caches.match(e.request)
+        .then(res => {
+            if (res) {
+                //recuperar del cache
+                return res
+            }
+            //recuperar de la petición a la url
+            return fetch(e.request)
+        })
+)
+})
